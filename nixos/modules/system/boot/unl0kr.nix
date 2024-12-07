@@ -15,7 +15,7 @@ in
       description = ''Whether to enable the unl0kr on-screen keyboard in initrd to unlock LUKS.'';
     };
 
-    package = lib.mkPackageOption pkgs "unl0kr" { };
+    package = lib.mkPackageOption pkgs "buffybox" { };
 
     allowVendorDrivers = lib.mkEnableOption "load optional drivers" // {
       description = ''Whether to load additional drivers for certain vendors (I.E: Wacom, Intel, etc.)'';
@@ -27,7 +27,7 @@ in
 
         See `unl0kr.conf(5)` for supported values.
 
-        Alternatively, visit `https://gitlab.com/postmarketOS/buffybox/-/blob/unl0kr-2.0.0/unl0kr.conf`
+        Alternatively, visit `https://gitlab.postmarketos.org/postmarketOS/buffybox/-/blob/3.2.0/unl0kr/unl0kr.conf`
       '';
 
       example = lib.literalExpression ''
@@ -55,11 +55,13 @@ in
         assertion = !config.boot.plymouth.enable;
         message = "unl0kr will not work if plymouth is enabled.";
       }
-      {
-        assertion = !config.hardware.amdgpu.initrd.enable;
-        message = "unl0kr has issues with video drivers that are loaded on stage 1.";
-      }
     ];
+
+    warnings =
+      if config.hardware.amdgpu.initrd.enable then
+        [ ''Use early video loading at your risk. It's not guaranteed to work with unl0kr.'' ]
+      else
+        [ ];
 
     boot.initrd.availableKernelModules =
       lib.optionals cfg.enable [
