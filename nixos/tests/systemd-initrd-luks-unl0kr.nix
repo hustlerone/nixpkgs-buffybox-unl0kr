@@ -4,7 +4,7 @@ import ./make-test-python.nix (
     passphrase = "secret";
   in
   {
-    name = "systemd-initrd-luks-unl0kr";
+    name = "systemd-initrd-luks-unl0kr"; # How to run an interactive test: `nix run .#nixosTests.systemd-initrd-luks-unl0kr.driverInteractive'
     meta = {
       maintainers = [ ];
     };
@@ -32,7 +32,10 @@ import ./make-test-python.nix (
           "bochs" # for debugging
         ];
 
-        environment.systemPackages = with pkgs; [ cryptsetup ];
+        environment.systemPackages = with pkgs; [
+          cryptsetup
+          bintools
+        ]; # I need strings to debug buffybox
         boot.initrd = {
           systemd = {
             enable = true;

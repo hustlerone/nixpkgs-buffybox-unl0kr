@@ -51,15 +51,13 @@ in
         assertion = cfg.enable -> config.boot.initrd.systemd.enable;
         message = "boot.initrd.unl0kr is only supported with boot.initrd.systemd.";
       }
-      {
-        assertion = !config.boot.plymouth.enable;
-        message = "unl0kr will not work if plymouth is enabled.";
-      }
     ];
 
     warnings =
       if config.hardware.amdgpu.initrd.enable then
         [ ''Use early video loading at your risk. It's not guaranteed to work with unl0kr.'' ]
+      else if config.boot.plymouth.enable then
+        [ ''Plymouth **might** cause issues'' ]
       else
         [ ];
 
@@ -84,60 +82,61 @@ in
 
     boot.initrd.systemd = {
       contents."/etc/unl0kr.conf".source = settingsFormat.generate "unl0kr.conf" cfg.settings;
-      storePaths = with pkgs; [
-        "${pkgs.gnugrep}/bin/grep"
-        libinput
-        xkeyboard_config
-        "${config.boot.initrd.systemd.package}/lib/systemd/systemd-reply-password"
-        (lib.getExe' cfg.package "unl0kr")
-      ];
+      storePaths = (
+        with pkgs;
+        [
+          libinput
+          libwacom
+          xkeyboard_config
+          cfg.package
+        ]
+      );
       services = {
-        unl0kr-ask-password = {
-          description = "Forward Password Requests to unl0kr";
+        unl0kr-agent = {
+          description = "Dispatch Password Requests to unl0kr";
+
+          unitConfig.DefaultDependencies = false;
+          unitConfig.ConditionPathExists = "!/run/plymouth/pid";
+
+          after = [
+            "plymouth-start.service"
+          ];
           conflicts = [
             "emergency.service"
-            "initrd-switch-root.target"
             "shutdown.target"
+            "initrd-switch-root.target"
           ];
-          unitConfig.DefaultDependencies = false;
-          after = [
-            "systemd-vconsole-setup.service"
-            "udev.service"
+          before = [
+            "emergency.service"
+            "shutdown.target"
+            "initrd-switch-root.target"
           ];
-          before = [ "shutdown.target" ];
-          script = ''
-            # This script acts as a Password Agent: https://systemd.io/PASSWORD_AGENTS/
 
-            DIR=/run/systemd/ask-password/
-            # If a user has multiple encrypted disks, the requests might come in different times,
-            # so make sure to answer as many requests as we can. Once boot succeeds, other
-            # password agents will be responsible for watching for requests.
-            while [ -d $DIR ] && [ "$(ls -A $DIR/ask.*)" ];
-            do
-              for file in `ls $DIR/ask.*`; do
-                socket="$(cat "$file" | ${pkgs.gnugrep}/bin/grep "Socket=" | cut -d= -f2)"
-                ${lib.getExe' cfg.package "unl0kr"} -v -C "/etc/unl0kr.conf" | ${config.boot.initrd.systemd.package}/lib/systemd/systemd-reply-password 1 "$socket"
-              done
-            done
-          '';
+          serviceConfig.ExecStart = "${cfg.package}/libexec/unl0kr-agent";
         };
       };
 
       paths = {
-        unl0kr-ask-password = {
-          description = "Forward Password Requests to unl0kr";
+        unl0kr-agent = {
+          description = "Dispatch Password Requests to unl0kr Directory Watch";
+
+          unitConfig.DefaultDependencies = false;
+          unitConfig.ConditionPathExists = "!/run/plymouth/pid";
+
+          after = [
+            "plymouth-start.service"
+          ];
           conflicts = [
             "emergency.service"
-            "initrd-switch-root.target"
             "shutdown.target"
           ];
-          unitConfig.DefaultDependencies = false;
           before = [
-            "shutdown.target"
             "paths.target"
             "cryptsetup.target"
+            "emergency.service"
+            "shutdown.target"
           ];
-          wantedBy = [ "sysinit.target" ];
+
           pathConfig = {
             DirectoryNotEmpty = "/run/systemd/ask-password";
             MakeDirectory = true;
